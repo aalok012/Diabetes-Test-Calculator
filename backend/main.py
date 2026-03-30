@@ -20,5 +20,8 @@ class PatientData(BaseModel):
     Age: float
     
 @app.post("/predict")
-def predict(data: PatientData)
-    
+def predict(data: PatientData):
+    input_data = [list(data.dict().values())]
+    scaled_data= scaler.transform(input_data)
+    prediction = model.predict_proba(scaled_data)
+    return {"probability": float(prediction[0][1])}    
