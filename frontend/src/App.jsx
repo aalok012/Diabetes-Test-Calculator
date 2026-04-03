@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
 import {
-  PieChart, Pie, Cell,
   BarChart, Bar, XAxis, YAxis, Tooltip, ReferenceLine, ResponsiveContainer,
   RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Legend,
 } from 'recharts'
@@ -161,13 +160,14 @@ function ArcPath({ cx, cy, r, pct, color }) {
 /* ─── SHAP tooltip (must be declared outside render) ────────── */
 function ShapTooltip({ active, payload }) {
   if (!active || !payload?.length) return null
-  const v = payload[0].value
+  const entry = payload[0].payload
+  const v = entry.pos !== 0 ? entry.pos : entry.neg
   return (
     <div style={{
       background: '#fff', border: '1px solid #b7e4c7',
       borderRadius: 8, padding: '8px 12px', fontSize: '0.8rem',
     }}>
-      <strong>{payload[0].payload.name}</strong><br />
+      <strong>{entry.name}</strong><br />
       <span style={{ color: v > 0 ? '#c1121f' : '#2d6a4f' }}>
         {v > 0 ? '▲ Increases risk' : '▼ Decreases risk'}: {v > 0 ? '+' : ''}{v}
       </span>
@@ -178,11 +178,15 @@ function ShapTooltip({ active, payload }) {
 /* ─── SHAP bar chart (Recharts) ──────────────────────────────── */
 function ShapBarChart({ shapValues }) {
   const data = Object.entries(shapValues)
-    .map(([key, val]) => ({
-      name: FIELDS.find(f => f.key === key)?.label ?? key,
-      value: parseFloat(val.toFixed(3)),
-    }))
-    .sort((a, b) => b.value - a.value)
+    .map(([key, val]) => {
+      const v = parseFloat(val.toFixed(3))
+      return {
+        name: FIELDS.find(f => f.key === key)?.label ?? key,
+        pos: v > 0 ? v : 0,
+        neg: v < 0 ? v : 0,
+      }
+    })
+    .sort((a, b) => (b.pos + b.neg) - (a.pos + a.neg))
 
   return (
     <div className="shap-chart-wrap">
@@ -200,11 +204,8 @@ function ShapBarChart({ shapValues }) {
           />
           <Tooltip content={<ShapTooltip />} />
           <ReferenceLine x={0} stroke="#b7e4c7" strokeWidth={1.5} />
-          <Bar dataKey="value" radius={[0, 4, 4, 0]} maxBarSize={16}>
-            {data.map((entry, i) => (
-              <Cell key={i} fill={entry.value > 0 ? '#c1121f' : '#2d6a4f'} fillOpacity={0.85} />
-            ))}
-          </Bar>
+          <Bar dataKey="pos" stackId="a" fill="#c1121f" fillOpacity={0.85} radius={[0, 4, 4, 0]} maxBarSize={16} />
+          <Bar dataKey="neg" stackId="a" fill="#2d6a4f" fillOpacity={0.85} radius={[0, 4, 4, 0]} maxBarSize={16} />
         </BarChart>
       </ResponsiveContainer>
       <p style={{ fontSize: '0.7rem', color: '#52796f', textAlign: 'center', marginTop: 4 }}>
@@ -291,7 +292,7 @@ function GraphsSection({ formData }) {
   const [modelInfo, setModelInfo] = useState(null)
 
   useEffect(() => {
-    fetch('http://localhost:8000/model-info')
+    fetch('https://diabetictor.onrender.com/model-info')
       .then(r => r.json())
       .then(setModelInfo)
       .catch(() => {})
@@ -358,9 +359,7 @@ function GraphsSection({ formData }) {
                   <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 10, fill: '#52796f' }} tickLine={false} axisLine={false} unit="%" />
                   <YAxis type="category" dataKey="name" width={72} tick={{ fontSize: 11, fill: '#52796f', fontFamily: "'Open Sans', sans-serif" }} tickLine={false} axisLine={false} />
                   <Tooltip content={<MetricTooltip />} />
-                  <Bar dataKey="value" radius={[0, 6, 6, 0]} maxBarSize={28}>
-                    {metricsData.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
-                  </Bar>
+                  <Bar dataKey="value" radius={[0, 6, 6, 0]} maxBarSize={28} fill="#2d6a4f" />
                 </BarChart>
               </ResponsiveContainer>
               <div className="metrics-row">
@@ -434,7 +433,7 @@ function FormCard({ onResult, onLoading, onFormData }) {
   async function handleSubmit() {
     onLoading(true)
     try {
-      const res = await fetch('http://localhost:8000/predict', {
+      const res = await fetch('https://diabetictor.onrender.com/predict', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
